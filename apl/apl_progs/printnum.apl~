@@ -1,0 +1,14 @@
+decl
+	integer n;
+enddecl
+
+integer main()
+{
+
+	print("Print_num_20");
+	while(n<=20) do
+		print(n);
+		n=n+1;
+	endwhile;
+	return 0;
+}

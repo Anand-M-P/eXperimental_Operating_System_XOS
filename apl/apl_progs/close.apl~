@@ -1,0 +1,6 @@
+integer main()
+{	
+	integer a;
+	a = Close(0);
+	return 0;
+}

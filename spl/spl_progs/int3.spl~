@@ -1,0 +1,107 @@
+alias sysCallNo S0;
+alias swof_index S1;
+alias fat_index S2;
+alias filename S3;
+alias physicalSP S4;
+alias currentPCB S5;
+alias currentPID S6;
+alias fileDesc S7;
+alias newLseek S8;
+alias freeBlock S9;
+alias lseek S10;
+alias filesize S11;
+alias basicBlock S12;
+alias wordToRead S13;
+alias dataBlock S14;
+
+physicalSP=([PTBR + 2 * (SP/512)] * 512)+(SP%512);
+filename=[physicalSP-3];
+sysCallNo=[physicalSP-1];
+
+fat_index=0;
+swof_index=0;
+freeBlock=0;
+
+if(sysCallNo==6) then
+	newLseek=[physicalSP-3];
+	fileDesc=[physicalSP-4];
+
+	if(fileDesc < 0 || fileDesc > 7) then
+               [physicalSP-2]=-1;
+	       ireturn;
+        endif; 
+
+	if(fileDesc < 0 || fileDesc > 7) then
+               [physicalSP-2]=-1;
+	       ireturn;
+        endif; 
+
+	currentPID = (PTBR - 1024) / 8;
+        currentPCB = READY_LIST + 32 * currentPID;
+				
+        if([currentPCB + 15 + 2*fileDesc ] == -1) then        	
+                [physicalSP-2]=-1;
+	        ireturn;
+	endif;
+
+	swof_index=[currentPCB + 15 + 2*fileDesc ];
+	lseek=[currentPCB + 15 + 2*fileDesc +1 ];
+        fat_index=[FILE_TABLE + swof_index*2];
+        filesize=[FAT + 8* fat_index + 1];
+
+	if(newLseek < 0 || newLseek> filesize) then
+	     [physicalSP-2]=-1;
+	     ireturn;
+	endif;
+
+	[currentPCB+ 15+2*fileDesc+1]=newLseek;
+	[physicalSP-2]=0;
+	ireturn;
+		
+endif;
+
+
+//READ system call
+
+if(sysCallNo==7) then
+	
+	wordToRead=[physicalSP-3];
+	fileDesc=[physicalSP-4];	
+
+         if(fileDesc < 0 || fileDesc > 7) then
+               [physicalSP-2]=-1;
+	        ireturn;
+         endif; 
+
+
+	currentPID=(PTBR-1024)/8;
+	currentPCB=(READY_LIST+32*currentPID);
+
+	if([currentPCB+15+2*fileDesc]==-1) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+	
+	swof_index=[currentPCB+15+2*fileDesc];
+	lseek=[currentPCB+15+2*fileDesc+1];
+	fat_index=[FILE_TABLE+2*swof_index];
+	filesize=[FAT+8*fat_index+1];
+	basicBlock=[FAT+8*fat_index+2];
+
+	load(1,basicBlock);
+	
+	if(lseek==filesize)then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+	
+	dataBlock=lseek/512;
+	load(1,[SCRATCHPAD+dataBlock]);
+	wordToRead=[SCRATCHPAD+(lseek%512)];
+	[physicalSP-3]=wordToRead;
+
+	[currentPCB + 15+ 2*fileDesc+1]=[currentPCB + 15+ 2*fileDesc+1]+1;
+	[physicalSP-2]=0;
+	ireturn;
+	
+endif;

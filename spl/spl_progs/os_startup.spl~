@@ -1,0 +1,92 @@
+//EXCEPTION EXHANDLER
+
+load(7,1);
+load(8,2);
+
+//INT7 INTERRUPT
+
+load(23,17);
+load(24,18);
+
+//for the interrupt routine 1
+load (11, 5);
+load (12, 6);
+
+//Loading FAT and DF
+load (5,19)
+load (6,20)
+
+
+[READY_LIST + 0]=0;
+
+//loading everything from the disk to the memory
+
+load(25,21);
+load(26,22);
+load(27,23);
+
+//setting the page table registers
+
+PTBR=1024;
+PTLR=4;
+
+//setting up the page table entries
+
+[PTBR + 0] = 25; // Physical Page Number for Logical Page 0
+[PTBR + 1] = "01"; // Auxiliary Information for Logical Page 0
+
+[PTBR + 2] = 26;
+[PTBR + 3] = "01";
+
+[PTBR + 4] = 27;
+[PTBR + 5] = "01";
+
+[PTBR + 6] = 28;// Auxiliary Information for Logical Page 3
+[PTBR + 7] = "01";// Auxiliary Information for Logical Page 3
+
+[READY_LIST + 1]= 2;
+
+SP = 3 * 512;
+
+[28 * 512]=0;
+
+
+//for the timer interrupt routine
+load (9, 3);
+load (10, 4);
+
+//setting pid for second process
+//[READY_LIST + 32] = 1 ;
+
+//load(29,27);//loading data block for even
+
+//alias PTBR_Process1 S0;
+//PTBR_Process1 = 1024 + 1 * 8;
+
+// Setting up page table for 2nd process
+
+//[PTBR_Process1 + 0] = 29; // Physical Page Number for Logical Page 0
+//[PTBR_Process1 + 1] = "01"; // Not referenced and Valid
+
+//[PTBR_Process1 + 2] = -1; // Invalid Page Number for Logical Page 1
+//[PTBR_Process1 + 3] = "00"; // Not referenced and Not Valid
+
+//[PTBR_Process1 + 4] = -1; // Invalid Page Number for Logical Page 1
+//[PTBR_Process1 + 5] = "00"; // Not referenced and Not Valid
+	
+//[PTBR_Process1 + 6] = 30; // Physical Page Number for Logical Page 3 
+//[PTBR_Process1 + 7] = "01"; // Not referenced and Valid
+
+//[READY_LIST + 33] = 1;	// STATE is READY
+
+//[READY_LIST + 37] = PTBR_Process1;	// PTBR 
+//[READY_LIST + 38] = 4;	// PTLR
+
+//[READY_LIST + 34] = 3 * 512; // Sets the entry for BP in the PCB
+//[READY_LIST + 35] = 3 * 512;	// Sets the entry for SP in the PCB
+
+//[READY_LIST + 36] = 0;	// Sets the entry for IP to logical address 0 in the PCB
+
+ireturn;
+
+

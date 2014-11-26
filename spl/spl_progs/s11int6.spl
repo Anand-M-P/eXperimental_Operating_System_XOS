@@ -1,0 +1,190 @@
+alias physicalSP S0;
+alias filename S1;
+alias counter S3;
+alias sysCallNo S4;
+alias Fatcounter S5;
+alias counter2 S6;
+alias validCode S7;
+alias validPage S9;
+alias currentPCB S2;
+alias currentPID S10;
+alias diff S11;
+alias counter1 S12;
+alias basicBlock S8;
+ 
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+sysCallNo=[physicalSP-1];
+
+currentPID = (PTBR - 1024) / 8;
+currentPCB = READY_LIST + 32 * currentPID;
+
+
+Fatcounter=0;
+counter=0;
+
+if ( sysCallNo == 9) then
+		 filename=[physicalSP-3];
+
+	while(Fatcounter<64 && [FAT+8*Fatcounter]!=filename ) do
+                      Fatcounter=Fatcounter+1;
+        endwhile; 
+                 
+  		
+        if(Fatcounter==64 ) then
+		
+       		 [physicalSP -2]=-1;
+        	 ireturn;
+	endif;
+
+	if([FAT+8*Fatcounter]==filename) then	
+		basicBlock=[FAT+8*Fatcounter+2];
+		load(1,basicBlock);
+		counter=0;
+		validCode=0;
+		
+		while(counter<256) do                                                       //count valid code blocks
+			if([512+counter] != -1 && [512+counter] !="") then
+				validCode = validCode + 1;
+			endif;
+			counter=counter+1;
+		endwhile;
+
+		if(validCode>3) then
+			[physicalSP-2]=-1;
+			ireturn;
+		endif;
+	
+		counter=0;
+		validPage=0;
+ 
+		while(counter<3) do                                                          //count valid page of current process
+ 			if([PTBR+2*counter + 1]==01 || [PTBR+2*counter + 1]== 11) then
+				validPage=validPage+1;
+			endif;
+			counter=counter+1;
+		endwhile;
+
+		if(validPage > validCode) then
+			diff=validPage-validCode;
+		else
+			diff=validCode-validPage;
+		endif;
+		
+		counter=0;
+		if(validPage > validCode) then
+			while(counter< 3-diff) do
+				counter=counter+1;
+			endwhile;
+			
+			counter1=0;
+			while(counter1<diff) do
+				[MEM_LIST + [PTBR+2*counter]]=0;
+				[PTBR+2*counter]=-1;
+				[PTBR+2*counter+1]="00";
+				counter1=counter1+1;
+				counter=counter+1;
+			endwhile;
+
+		endif;
+
+		counter=0;
+		counter1=0;
+		if(validCode>validPage) then
+			while(counter1<diff && counter<64) do                  //search for valid pages
+				if([MEM_LIST+counter]==0) then
+					counter1=counter1+1;
+				endif;
+				counter=counter+1;
+			endwhile;
+
+			if(counter==64) then
+				[physicalSP-2]=-1;
+				ireturn;
+			else
+				counter=0;
+				while(counter<3-diff) do
+					counter=counter+1;
+				endwhile;
+				
+				counter1=0;
+				counter2=0;
+				
+				while(counter1<diff) do
+					if([MEM_LIST+counter2]==0) then
+						[MEM_LIST+counter2]=1;
+						[PTBR+2*counter]=counter2;
+						[PTBR+2*counter + 1]="01";
+						counter1=counter1+1;
+						counter=counter+1;
+					endif;
+					counter2=counter2+1;
+				endwhile;
+			endif;
+		endif;
+
+		counter=0;
+		counter1=0;
+		load(1,basicBlock);
+		while(counter<validCode) do
+			while(([PTBR+2*counter1 + 1]==00 || [PTBR+2*counter1+1]==10) && counter1<3) do
+ 				counter1=counter1+1;
+			endwhile;
+			
+			load([PTBR+2*counter1],[512+counter]);
+			counter1=counter1+1;
+			counter=counter+1;
+		endwhile;							
+						
+		counter=0;
+		while(counter<8) do                                                    // closing files of current process	
+			if([currentPCB+15+2*counter] != -1) then
+				[FILE_TABLE+[currentPCB+15+2*counter]*2+1] = [FILE_TABLE+[currentPCB+15+2*counter]*2+1]-1;
+				if([FILE_TABLE+[currentPCB+15+2*counter]*2+1]==0) then
+					[FILE_TABLE+[currentPCB+15+2*counter]*2]=-1;
+				endif;
+				[currentPCB+15+2*counter]=-1;
+				[currentPCB+15+2*counter+1]=-1;
+			endif;
+      			counter=counter+1;
+		endwhile;					
+
+		SP=3*512;
+		physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+		[physicalSP]=0;
+		ireturn;	
+ 	endif;
+endif;								
+		
+
+if(sysCallNo==11) then
+  	[physicalSP-2]=currentPID;
+	ireturn;
+
+endif;
+
+
+
+
+if(sysCallNo==12) then
+  	[physicalSP-2]=[currentPCB+31];
+	ireturn;
+	
+endif;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		  
+
+

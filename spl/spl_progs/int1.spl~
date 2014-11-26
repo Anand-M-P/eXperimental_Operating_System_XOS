@@ -1,0 +1,177 @@
+alias physicalSP S0;
+alias sysCallNo S1;
+alias filename S2;
+
+
+alias basic_block S4;
+alias fat_index S5;
+alias data_blocks S6;
+
+alias swof_index S7;
+alias temp S8;
+alias counter S9;
+
+basic_block=0;
+fat_index=0;
+data_blocks=0;
+
+//obtaining the stack pointer addr.
+physicalSP = ([PTBR + 2 * (SP/512)] * 512 ) + (SP % 512);
+
+//Fetching system call # and argument (here file name)
+
+sysCallNo=[physicalSP-1];
+filename = [physicalSP -3];
+
+
+//Create : system call
+
+if ( sysCallNo == 1) then
+
+
+	//checking FAT entries
+
+	while(fat_index<512) do
+		if([FAT + fat_index] == filename) then
+			[physicalSP-2]=0;
+			ireturn;
+			//Returns if file already exists
+		endif;
+		fat_index=fat_index+8;  //8 word long
+	endwhile;
+
+//checking for disk free list .Breaks when found a free block else exists
+
+	while(basic_block<448) do
+		if([DISK_LIST + basic_block]==0) then
+			break;
+			//Now we have the value of basic block#
+		endif;
+	basic_block=basic_block+1;
+	endwhile;
+
+//No free blocks
+	if(basic_block == 448) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+
+
+	
+//checks for free fat entry
+	fat_index=0;
+
+	while(fat_index<512) do
+		if([FAT + fat_index + 2 ]== -1) then
+			break;
+		endif;
+		fat_index=fat_index+8;
+	endwhile;
+
+	
+
+	if(fat_index == 512) then
+		[physicalSP-2]=-1;
+		ireturn;
+		//if no free fat; returns 
+	endif;
+
+//Setting the fat entry
+
+	[FAT+fat_index]=filename;
+	[FAT+fat_index+1]=0;
+	[FAT+fat_index+2]=basic_block;	
+
+//Setting the basic block entries
+
+	load(1,basic_block);
+
+	while(data_blocks < 256) do
+		[SCRATCHPAD + data_blocks]=-1;
+		data_blocks=data_blocks+1;
+	endwhile;
+
+	store(1,basic_block);
+	[DISK_LIST+basic_block]=1;
+	store (5,19);
+	store (6,20);
+	[physicalSP-2]=0;
+	ireturn;
+endif;
+
+
+
+//DELETE system call
+
+if(sysCallNo==4) then
+	
+	fat_index=0;
+
+	while(fat_index < 64 && [FAT + 8 * fat_index] != filename) do
+		fat_index= fat_index + 1; 
+	endwhile;
+	
+	if(fat_index == 64) then
+		[physicalSP-2]= -1;
+		ireturn;
+	endif;
+
+	swof_index=0;
+	
+	while(swof_index < 64 && [FILE_TABLE + 2 * swof_index] != fat_index) do
+	swof_index = swof_index + 1;
+	endwhile;
+	
+//if the file is opened then exists	
+	if([FILE_TABLE + 2 * swof_index] == fat_index) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+
+//loading the basic block to scratchpad
+
+	load(1,[FAT + 8 * fat_index + 2]);
+	data_blocks=0;
+
+//setting all the data block entries to empty string
+
+	while(data_blocks<256 && [SCRATCHPAD + data_blocks]!= -1) do
+		temp=[SCRATCHPAD+data_blocks];
+		load(1,[SCRATCHPAD+data_blocks]);
+		counter=0;
+		while(counter<512) do
+			[512+counter]="";
+			counter=counter+1;
+		endwhile;
+		
+		store(1,temp);
+//setting the disk free list for the corresponding data block
+		[DISK_LIST + [SCRATCHPAD+data_blocks]]=0;
+//loading back the basic block to scratchpad
+		load(1,[FAT + 8 * fat_index + 2]);
+		data_blocks = data_blocks + 1;
+	endwhile;
+
+//setting the basic block entries
+
+	counter=0;
+	while(counter<256 && [512+counter]!=-1) do
+		[512+counter]="";
+		counter=counter+1;
+	endwhile;
+	
+	store(1, [FAT+8*fat_index+2]);
+	[DISK_LIST + [FAT+8*fat_index+2]]=0;//DF for basic block
+	
+//setting up the fat entry
+	[FAT+8*fat_index+0]=-1;
+	[FAT+8*fat_index+1]=0;
+	[FAT+8*fat_index+2]=-1;
+//storing back the fat and df
+	store(5,19);
+	store(6,20);
+	[physicalSP -2]=0;
+        ireturn;
+	
+endif;
+

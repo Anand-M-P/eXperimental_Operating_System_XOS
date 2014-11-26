@@ -1,0 +1,38 @@
+integer main()
+{
+  integer status,third,second,pid,childpid,counter,counter1;
+ 
+
+	second=Fork();
+	if(second==-2) then
+		status=Wait(Getppid());
+		counter=4;
+		print("snd process");		
+		while(counter<7) do
+			//if(counter==7) then
+				//pid=Signal();
+			//endif;
+			print(counter);
+			counter=counter+1;
+		endwhile;
+	
+	else
+		
+		counter1=1;
+		print("frst process");
+		while(counter1<9) do
+			if(counter1==4) then
+				counter1=7;
+				print("frst pro");
+				pid=Wait(second);
+			endif;		
+			print(counter1);
+			counter1=counter1+1;
+		
+		endwhile;
+		
+		//status=Exec("even.xsm");
+	endif;
+return 0;
+}
+

@@ -1,0 +1,121 @@
+alias physicalSP S0;
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+alias freeBlock S1;
+alias sysCallNo S2;
+alias fileName S3;
+alias counterFAT S4;
+alias counter S5;
+alias counterSWOF S6;
+alias counter1 S7;
+alias var S8;
+
+
+counter1=0;
+freeBlock=0; 
+counterFAT=0;
+counter=0;
+counterSWOF=0;
+
+sysCallNo=[physicalSP-1];
+
+
+breakpoint;
+ 
+// Get system call no. from the stack and put it in a register
+// Get arguments from stack and put it in registers
+
+if ( sysCallNo == 1) then
+	fileName=[physicalSP-3];	
+	while(freeBlock<448 && [DISK_LIST+freeBlock]==1) do
+		freeBlock=freeBlock+1;
+	endwhile;	
+	if (freeBlock==448) then
+		[physicalSP-2]=-1;
+		ireturn;
+	else
+		while(FAT+counterFAT*8<3072 && [FAT+counterFAT*8]!=-1 && [FAT+counterFAT*8]!=fileName) do
+			counterFAT=counterFAT+1;
+		endwhile;
+		if(FAT+counterFAT*8==3072) then
+			[physicalSP-2]=-1;
+			ireturn;
+		endif;		
+		if([FAT+counterFAT*8]==fileName) then
+			[physicalSP-2]=0;
+			ireturn;
+		else
+			[FAT+counterFAT*8]=fileName;
+			[FAT+counterFAT*8+1]=0;
+			[FAT+counterFAT*8+2]=freeBlock;
+			load(1,freeBlock);
+			while(counter<256) do
+				[512+counter]=-1;
+				counter=counter+1;
+			endwhile;
+			store(1,freeBlock);
+			[DISK_LIST+freeBlock]=1;
+			store(5,19);
+			store(6,20);
+			[physicalSP-2]=0;
+			ireturn;
+		endif;
+	endif;	
+endif;
+
+counter1=0;
+freeBlock=0; 
+counterFAT=0;
+counter=0;
+counterSWOF=0;
+
+if(sysCallNo==4) then
+	fileName=[physicalSP-3];
+	while(counterFAT<64 && [FAT+counterFAT*8]!=fileName) do
+		counterFAT=counterFAT+1;
+	endwhile;
+	if(counterFAT==64) then
+		[physicalSP-2]=-1;
+		ireturn;
+	else
+		while(counterSWOF<64 && [FILE_TABLE+counterSWOF*2]!=counterFAT) do
+			counterSWOF=counterSWOF+1;
+		endwhile;
+		if([FILE_TABLE+counterSWOF*2]==counterFAT && [FILE_TABLE+counterSWOF*2+1]!=0) then	
+			[physicalSP-2]=-1;	
+			ireturn;
+		else
+			
+				load(1,[FAT+counterFAT*8+2]);
+				
+				while(counter<256 && [512+counter]!=-1) do
+					var=[512+counter];						
+					load(1,[512+counter]);
+					counter1=0;
+					while(counter1<512) do
+						[512+counter1]="";
+						counter1=counter1+1;
+					endwhile;
+					store(1,var);
+					[DISK_LIST+var]=0;
+					load(1,[FAT+counterFAT*8+2]);
+					counter=counter+1;
+				endwhile;
+				counter=0;
+				while(counter<256 && [512+counter]!=-1) do
+					[512+counter]="";
+					counter=counter+1;
+				endwhile;
+				store(1,[FAT+counterFAT*8+2]);				
+				[DISK_LIST+[FAT+counterFAT*8+2]]=0;
+				[FAT+counterFAT*8]=-1;
+				[FAT+counterFAT*8+1]=0;
+				[FAT+counterFAT*8+2]=-1;
+				store(5,19);
+				store(6,20);
+				[physicalSP-2]=0;
+				ireturn;		
+			
+		endif;
+	endif;
+endif;
+

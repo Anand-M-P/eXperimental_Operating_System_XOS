@@ -1,0 +1,154 @@
+alias physicalSP S0;
+alias filename S1;
+alias counter S3;
+alias sysCallNo S4;
+alias FATindex S5;
+alias counter1 S6;
+alias validCode S7;
+alias validPage S9;
+alias currentPCB S2;
+alias currentPID S10;
+alias diff S11;
+alias basicBlock S8;
+ 
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+sysCallNo=[physicalSP-1];
+
+currentPID = (PTBR - 1024) / 8;
+currentPCB = READY_LIST + 32 * currentPID;
+
+
+FATindex=0;
+counter=0;
+
+if ( sysCallNo == 9) then
+	filename=[physicalSP-3];
+
+	while(FATindex<64 && [FAT+8*FATindex]!=filename ) do
+                      FATindex=FATindex+1;
+        endwhile; 
+                 
+  	//File dont exist
+	
+        if(FATindex==64 ) then
+       		 [physicalSP -2]=-1;
+        	 ireturn;
+	endif;
+
+	if([FAT+8*FATindex]==filename) then	
+		basicBlock=[FAT+8*FATindex+2];
+		load(1,basicBlock);
+
+	//-----------------------------------MODIFICATION-------------------------------------------
+
+		counter=0;	
+
+		while(counter<3) do            
+
+			//-----------DECREMENTING VALID PAGES OF CURRENT PROCESS----------
+
+ 			if([PTBR+2*counter + 1]==01 || [PTBR+2*counter + 1]== 11) then
+				[MEM_LIST+[PTBR+2*counter]]=[MEM_LIST+[PTBR+2*counter]]-1; //values decremented
+
+			else
+				if(([PTBR+2*counter + 1]==00 || [PTBR+2*counter + 1]== 10) && [PTBR+2*counter]>447 && [PTBR+2*counter]<512) then                                 //------INVALID PAGES OR SWAP BLOCK------	
+					[DISK_LIST+[PTBR+2*counter]]=[DISK_LIST+[PTBR+2*counter]]-1;
+				endif;
+			endif;
+			counter=counter+1;
+		endwhile;
+			
+
+		counter=0;
+		validCode=0;
+		
+		//------VALID CODE BLOCKS------
+
+		while([512+counter] !=-1) do                                                       
+			validCode = validCode + 1;
+			counter=counter+1;
+		endwhile;
+
+		counter=0;
+		counter1=0;
+
+		//-----PAGE TABLE OF NEW PROCESS--------
+
+		while(validCode>counter) do                                  
+				[PTBR+2*counter]=[512+counter];
+				[PTBR+2*counter+1]="00";
+				counter=counter+1;
+		endwhile;
+
+		//-----if less than 3 code blocks free memory--------
+
+		counter=0;
+		while(3-validCode>0) do                              //setting rest entries to -1
+			[PTBR+2*validCode]=-1;
+			[PTBR+2*validCode+1]="00";
+			validCode=validCode+1;
+		endwhile;
+
+		[PTBR+7]="01";	//setting the stack entry auxiliary	
+	
+	        //store(6,20);
+		//store(1,basicBlock);			
+
+		//---------------------PPOF and SWOF TABLE-----------------------------------
+		counter=0;
+		while(counter<8) do                                                    // closing files of current process	
+			if([currentPCB+15+2*counter] != -1) then
+				[FILE_TABLE+[currentPCB+15+2*counter]*2+1] = [FILE_TABLE+[currentPCB+15+2*counter]*2+1]-1;
+				if([FILE_TABLE+[currentPCB+15+2*counter]*2+1]==0) then
+					[FILE_TABLE+[currentPCB+15+2*counter]*2]=-1;
+				endif;
+				[currentPCB+15+2*counter]=-1;
+				[currentPCB+15+2*counter+1]=-1;
+			endif;
+      			counter=counter+1;
+		endwhile;
+
+		//------------------------------------------------------------------------------					
+
+		SP=3*512;
+		physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+		[physicalSP]=0;
+		ireturn;	
+ 	endif;
+endif;								
+		
+if(sysCallNo==11) then
+  	[physicalSP-2]=currentPID;
+	ireturn;
+
+endif;
+
+
+
+
+if(sysCallNo==12) then
+  	[physicalSP-2]=[currentPCB+31];
+	ireturn;
+	
+endif;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		  
+
+

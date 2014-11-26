@@ -1,0 +1,23 @@
+integer main()
+{	
+
+	integer status1,status2,i,file_des1,file_des2,status;
+	i=0;
+	status1=Create("num1.dat")
+	status2=Create("num2.dat")
+	file_des1=Open("num1.dat")
+	file_des2=Open("num2.dat")
+	while(i<=20) do
+		if((i%2)!=0) then
+			status=Write(file_dec1,i)
+		else
+			status=Write(file_dec2,i)
+		endif
+	endwhile
+
+	status=Close("num1.dat")
+	status=Close("num2.dat")
+		
+
+	retrun 0;
+}

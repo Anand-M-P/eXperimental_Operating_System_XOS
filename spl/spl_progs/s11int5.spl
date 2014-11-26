@@ -1,0 +1,173 @@
+alias physicalSP S0;
+alias childPhysicalSP S1;
+alias counter S3;
+alias sysCallNo S4;
+alias PCBindex S5;
+alias parentPCB S6;
+alias parentPID S12;
+alias validPageCounter S7;
+alias childPCB S2;
+alias childPID S10;
+alias childPTBR S8;
+alias wordCount S9;
+alias counter1 S11;
+alias freePage S13;
+alias validPage S14;
+
+breakpoint;
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+
+sysCallNo=[physicalSP-1];
+breakpoint;
+parentPID=(PTBR-1024)/8;
+parentPCB=READY_LIST + parentPID*32;
+
+PCBindex=0;
+breakpoint;
+
+if ( sysCallNo == 8) then
+
+	while(PCBindex<32 && [READY_LIST + 32*PCBindex + 1]!=0) do
+		PCBindex=PCBindex+1;
+        endwhile;	
+
+    if(PCBindex==32) then
+		[physicalSP-2]=-1;
+		ireturn;
+    else	
+	
+	childPID=PCBindex;
+	
+	[READY_LIST + 32*PCBindex]=PCBindex;
+	childPCB=READY_LIST + 32*childPID;
+	childPTBR=1024+childPID*8;
+
+	counter=0;
+	validPage=0;
+	
+	while(counter<4) do
+		if([PTBR + 2*counter + 1]==01 || [PTBR + 2*counter + 1]==11) then
+  			validPage=validPage+1;
+		endif;
+		counter=counter+1;
+	endwhile;
+
+
+		counter=29;
+		
+breakpoint;
+		while(counter<64 && [MEM_LIST+counter]!=0) do
+			counter=counter+1;	
+		endwhile;
+		if(counter==64) then
+			[physicalSP-2]=-1;
+			ireturn;
+		endif;
+		
+
+
+breakpoint;
+	counter=0;
+	freePage=0;
+
+	while(counter<64 && freePage < validPage) do
+		if([MEM_LIST + counter]==0) then
+			freePage=freePage+1;
+		endif;		
+	
+		counter=counter+1;
+	endwhile;
+
+	if(freePage < validPage) then
+		[physicalSP-2]=-1;
+		ireturn;
+
+	else
+		counter=0;
+		while(counter<4) do
+			[childPTBR + counter*2]=[PTBR+ counter*2];
+			[childPTBR + counter*2 + 1]=[PTBR+ counter*2 + 1];
+			counter=counter+1;
+		endwhile;
+breakpoint;
+		validPageCounter=0;
+		counter=0;
+		counter1=0;
+		
+		while(validPageCounter < validPage) do
+			if([MEM_LIST + counter]==0) then
+				[MEM_LIST + counter]=1;
+				
+				while([PTBR+2*counter1+1]=="00" || [PTBR+2*counter1+1]=="10") do
+						[childPTBR+counter*2]=-1;
+						[childPTBR+counter*2+1]=[PTBR+counter*2+1];
+						counter1=counter1+1;
+					endwhile;
+				
+				wordCount=0;
+				while(wordCount<512) do
+					[ counter*512 + wordCount]=[[PTBR + counter1*2]*512 + wordCount];
+					wordCount=wordCount+1;
+				endwhile;
+				[childPTBR + 2*counter1]=counter;
+				counter1=counter1+1;
+				validPageCounter=validPageCounter+1;
+			endif;		
+			counter=counter+1;					
+		endwhile;
+       
+breakpoint;
+	[childPCB + 5]=childPTBR;
+	[childPCB + 4]=[physicalSP];
+	[childPCB + 3]=SP-1;
+	[childPCB + 2]=BP;
+	[childPCB + 6]=PTLR;
+	[childPCB + 7]=R0;
+	[childPCB + 8]=R1;
+	[childPCB + 9]=R2;
+	[childPCB + 10]=R3;
+	[childPCB + 11]=R4;
+	[childPCB + 12]=R5;
+	[childPCB + 13]=R6;
+	[childPCB + 14]=R7;
+	
+	counter=0;
+	
+	while(counter<8) do
+		[childPCB + 15 + 2*counter] = [parentPCB + 15 + 2*counter];
+		[childPCB + 15 + 2*counter+1] = [parentPCB + 15 + 2*counter+1];	
+		counter=counter+1;
+	endwhile;
+breakpoint;
+	counter=0;
+	while(counter<8) do
+		if([parentPCB + 15 + 2*counter] != -1) then    //valid entry SWOP index
+			[FILE_TABLE + [parentPCB + 15 + counter*2]*2 + 1]=[FILE_TABLE + [parentPCB + 15 + counter*2]*2 + 1] + 1;
+		endif;
+		counter=counter+1;
+	endwhile;
+breakpoint;
+	[childPCB + 1]=1;
+	[childPCB + 31]=parentPID;
+	[physicalSP-2]=childPID;
+	childPhysicalSP=([childPTBR + ((SP-1)/512)*2]*512) + ((SP-1) % 512);
+	[childPhysicalSP-1]=-2;
+	ireturn;
+      endif;	
+   endif;
+
+endif; 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

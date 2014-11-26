@@ -1,0 +1,148 @@
+alias phyPageNo S1;
+alias counter S3;
+alias VPagenum S4;
+alias IPaddr S5;
+alias freePage S11;
+alias cause S13;
+alias physicalSP S2;
+alias count S6;
+alias j S7;
+alias nextPTBR S8;
+alias i S9;
+
+cause = EFR % 10;		// Gets value of cause field (size 1 char)
+VPagenum = (EFR / 10) % 100;    // Gets value of BadVAddr 
+IPaddr = (EFR/1000);		//Gets value of IP at the point of exception
+
+count=0;
+//breakpoint;
+if(cause!=0) then
+	if(cause==1) then
+		print("Ill_instr");
+	endif;
+
+	if(cause==2) then
+		print("Ill_mem_acs");
+	endif;
+
+	if(cause==3) then
+		print("Arith_exp");
+	endif;
+
+	if(cause==4) then
+		print("Ill_oprnd");
+	endif;
+	
+	inline "MOV R0,10";
+	inline "PUSH R0";
+	inline "PUSH R0";
+	inline "JMP 11776";
+endif;
+
+nextPTBR=PTBR;
+
+if(cause==0) then
+
+	if([nextPTBR+VPagenum*2]==-1) then //Illegal address access 
+		print("Ill_addr");
+		
+		inline "MOV R0,10";
+		inline "PUSH R0";
+		inline "PUSH R0";
+		inline "JMP 11776";
+
+	endif;
+		counter=0;
+		while(counter<64 && [MEM_LIST+counter]!=0) do
+			counter=counter+1;
+		endwhile;
+breakpoint;
+		if(counter<64) then
+			freePage=counter;
+			[MEM_LIST+freePage]=1;
+		endif;
+
+breakpoint;		
+
+	//--------------------SECOND CHANCE ALGORITHM----------------------
+
+		if(counter>=64) then
+			j=VPagenum;                     
+
+			while(count<128) do
+				if(j != 3) then
+					if([nextPTBR+j*2+1]=="11") then
+						[nextPTBR+j*2+1]="01";
+						//count=count+1;
+						//j=j+1;
+					endif;
+
+breakpoint;
+					if([nextPTBR+j*2+1]=="01") then
+						if([[nextPTBR+j*2]+MEM_LIST]<2) then //Memory page is not shared.
+							i=448;
+							//checking disk free list
+							while(i<512 && [DISK_LIST+i]!=0) do
+								i=i+1;
+							endwhile;
+							
+							if(i==512) then
+		
+								inline "MOV R0,10";
+								inline "PUSH R0";
+								inline "PUSH R0";
+								inline "JMP 11776";   //NO free swap block available exit
+							endif;
+							
+							store([nextPTBR+j*2],i);
+
+							[[nextPTBR+j*2]+MEM_LIST]=0;
+							[DISK_LIST+i]=[DISK_LIST+i]+1;
+
+							freePage=[nextPTBR+j*2];
+
+							[nextPTBR+j*2]=i;
+							[nextPTBR+j*2+1]="00";
+							break;
+						endif;
+					endif;
+breakpoint;
+					count=count+1;
+					j=j+1;
+				else
+					count=count+1;
+					j=0;
+					if(nextPTBR==1272) then
+						nextPTBR=PAGE_TABLE;
+					else
+					        nextPTBR=nextPTBR+8;
+					endif;
+breakpoint;
+				endif;
+			endwhile;
+		endif;
+						
+breakpoint;
+
+	[MEM_LIST+freePage]=1;
+	phyPageNo=[PTBR+VPagenum*2];
+breakpoint;
+	if(phyPageNo<448 && phyPageNo>20) then
+		load(freePage,phyPageNo);
+	endif;
+			
+	if(phyPageNo>447 && phyPageNo<512) then
+		load(freePage,phyPageNo);
+		[DISK_LIST+phyPageNo]=[DISK_LIST+phyPageNo]-1;
+	endif;
+	
+	[PTBR+VPagenum*2]=freePage;
+	[PTBR+VPagenum*2+1]="11";
+	
+	SP=SP+1;
+	physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+	[physicalSP]=IPaddr;
+breakpoint;
+	ireturn;	
+endif;
+

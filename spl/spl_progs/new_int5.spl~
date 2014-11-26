@@ -1,0 +1,194 @@
+alias physicalsp S0;
+physicalsp = ([PTBR + 2* (SP/512)]*512 + (SP%512));
+
+alias syscallno S1;
+syscallno = [physicalsp-1];
+
+alias counter S2;
+counter=0;
+
+alias currentpid S9;
+currentpid = (PTBR - 1024)/8;
+
+alias currentpcb S10;
+currentpcb = READY_LIST + (currentpid *32);
+
+if(syscallno == 8) then
+	alias free_pcb S3;
+	free_pcb = 0;
+	while([READY_LIST + (counter*32) + 1] != 0 && counter<32) do
+		counter = counter +1;
+	endwhile;
+	if( counter>=32) then
+		[physicalsp-2] = -1 ;
+		ireturn;
+	endif;
+									//found pid
+	free_pcb = counter;
+	counter=0;
+	
+
+	[READY_LIST + (free_pcb*32)] = free_pcb;
+	
+									//checking for sufficient space 
+	counter =25;
+	while(counter<64) do
+			if([MEM_LIST + counter]==0) then
+				break;
+			else
+				counter=counter+1;
+			endif;
+	endwhile;
+										//checking if desired space is free inside memory
+	if(counter>=64) then
+		
+		alias counter_ptbr S5;
+		counter_ptbr = 0;
+		alias i_ptbr S6;
+		i_ptbr=0;
+		alias flag S11;
+		flag=1;
+		
+		
+		while(1) do
+			
+			while(i_ptbr<3) do
+				
+					
+
+
+					alias temp S12;
+					temp=1024 + counter_ptbr*8;
+				if([1024+(((temp) + i_ptbr*2+1)%256)]%10==1 ) then
+					
+					alias counter_df S13;
+					counter_df=448;
+					while([DISK_LIST+counter_df]!=0 && counter_df<512) do
+						counter_df=counter_df+1;
+					endwhile;
+					if(counter_df>=512) then
+						print "NO SWAP AREA AVAILABLE";
+						inline "JMP 11776";
+					endif;
+
+					[DISK_LIST + counter_df]=1;
+					
+					alias victim_pg S7;
+					victim_pg = [1024+(((temp) + i_ptbr*2)%256)];
+					
+					store(victim_pg,counter_df);
+					[1024+(((temp) + i_ptbr*2)%256)]=counter_df;
+					[1024+(((temp) + i_ptbr*2+1)%256)]="00";
+				
+					flag=0;
+					counter=victim_pg;
+					break;				
+				endif;
+
+				
+
+			i_ptbr=i_ptbr+1;
+			endwhile;
+		
+		if(flag==0) then
+			break;
+		endif;
+		counter_ptbr=counter_ptbr+1;
+		i_ptbr=0;
+		endwhile;
+	
+
+	
+	endif;
+
+	alias ptbr_new S8;
+	ptbr_new = ((free_pcb * 8)+1024); 
+	
+	[MEM_LIST+ counter]=1;
+	[ptbr_new +6]=counter;
+	[ptbr_new +7]="01";
+	
+	alias counter_cp S7;
+	counter_cp=0;
+	
+	
+	
+	while(counter_cp<512) do							//copying stack of parent
+		[counter*512 + counter_cp]=[ [PTBR+ (3*2)]*512 +counter_cp];
+		counter_cp=counter_cp+1;
+	endwhile;
+
+	
+
+	counter=0;
+	while(counter<3) do
+		[ptbr_new + (counter*2)]=[PTBR + (counter*2)];
+		[ptbr_new + (counter*2)+1]=[PTBR + (counter*2)+1];
+		if([PTBR + (counter*2)+1]%10==1) then
+			[MEM_LIST + [PTBR + (counter*2)]]=[MEM_LIST + [PTBR + (counter*2)]]+1;
+		endif;
+	if([PTBR + (counter*2)]>=448 && [PTBR + (counter*2)]<=511 && ([PTBR + (counter*2)+1]%10==0)) then
+			[DISK_LIST + [PTBR + (counter*2)]]=[DISK_LIST + [PTBR + (counter*2)]]+1;
+			
+		endif;
+		counter=counter+1;
+	endwhile;
+
+
+	alias c_pcb S4;
+	c_pcb=	(free_pcb*32);
+										//setting the value of PTBR OF child
+	[READY_LIST + (c_pcb) + 5]= ptbr_new;
+										//setting the value of IP of child
+	[READY_LIST + (c_pcb) + 4]=[physicalsp];
+										//setting the value of SP of child
+	[READY_LIST + (c_pcb) + 3]= SP-1;
+										//giving values to the remaining registers
+	[READY_LIST + (c_pcb) + 2]=BP;
+	[READY_LIST + (c_pcb) + 6]=PTLR;
+	[READY_LIST + (c_pcb) + 7]=R0;
+	[READY_LIST + (c_pcb) + 8]=R1;
+	[READY_LIST + (c_pcb) + 9]=R2;
+	[READY_LIST + (c_pcb) + 10]=R3;
+	[READY_LIST + (c_pcb) + 11]=R4;
+	[READY_LIST + (c_pcb) + 12]=R5;
+	[READY_LIST + (c_pcb) + 13]=R6;
+	[READY_LIST + (c_pcb) + 14]=R7;
+	[READY_LIST + (c_pcb) + 1]=1;
+	
+
+	counter=0;
+	while(counter<8) do
+		[READY_LIST + (c_pcb) +15 +(counter*2)]=[currentpcb + (counter*2)+15];
+		[READY_LIST + (c_pcb) +15 +(counter*2)+1]=[currentpcb + (counter*2)+16];
+		if([READY_LIST+(c_pcb) +15 +(counter*2)] != -1) then
+			[FILE_TABLE + [currentpcb + (counter*2) +15]*2 +1]=[FILE_TABLE + [currentpcb + (counter*2) +15]*2 +1]+1;
+		endif;
+		counter=counter+1;
+	endwhile;
+
+										//return value at sp-2
+	[physicalsp-2]=free_pcb;
+
+	alias new_physp S11;
+	new_physp=([ptbr_new + 2* ((SP-1)/512)]*512 + ((SP-1)%512));
+	
+	[new_physp-1]=-2;
+	
+	store(6,20);
+	
+	
+	breakpoint;
+	ireturn;
+endif;
+
+
+
+
+
+
+
+
+
+
+

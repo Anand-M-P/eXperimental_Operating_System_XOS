@@ -1,0 +1,162 @@
+alias physicalSP S0;
+alias sysCallNo S1;
+alias filename S2;
+
+alias counter S3;
+alias fat_index S4;
+alias swof_index S5;
+alias currentPID S6;
+alias currentPCB S7;
+alias pppt_index S8;
+alias fileDesc S9;
+
+counter=0;
+
+
+physicalSP=([PTBR + 2 * (SP / 512)] * 512) + ( SP % 512);
+
+sysCallNo=[physicalSP-1];
+filename= [physicalSP-3];
+
+if(sysCallNo == 2) then
+	
+	while(counter<512) do
+		if([FAT + counter]==filename) then
+			fat_index = counter/8;
+			break;
+		endif;
+		counter=counter+8;
+	endwhile;
+	
+//exits if the file is not present
+
+	if(counter==512) then
+		[physicalSP - 2]=-1;
+		ireturn;
+	endif;
+
+	swof_index=0;
+	
+	while(swof_index<64 && [FILE_TABLE+swof_index*2]!=fat_index) do
+		swof_index=swof_index+1;
+	endwhile;		
+
+	if([FILE_TABLE+swof_index*2]==fat_index) then
+		currentPID = ((PTBR -1024) / 8);
+
+		currentPCB = READY_LIST + currentPID * 32;
+	
+		counter = 15;
+
+		while(counter < 31) do
+			if([currentPCB + counter]==-1) then
+				pppt_index = (counter-15)/2;
+				break;
+			endif;
+		counter=counter+2;
+		endwhile;
+	
+	//process has opened max 8 files : hence exists
+	
+		if(counter == 31) then
+			[physicalSP - 2]=-1;
+			ireturn;
+		endif;
+		
+	//setting up the per process table entry and system wide open file table entry
+
+		[currentPCB + 15 + pppt_index*2 + 0 ] = swof_index;
+		[currentPCB + 15 + pppt_index*2 + 1 ] = 0;
+	
+		[FILE_TABLE + swof_index*2 + 0] = fat_index;
+		[FILE_TABLE + swof_index*2 + 1] = [FILE_TABLE + swof_index*2 + 1]+1;
+		
+		[physicalSP - 2] = pppt_index;
+		ireturn;
+		
+	endif;
+
+	if(swof_index==64) then
+		swof_index=0;
+		while(swof_index<64 && [FILE_TABLE+swof_index*2]==-1) do
+			swof_index=swof_index+1;
+		endwhile;
+		if(swof_index==64) then
+				[physicalSP-2]=-1;
+				ireturn;
+		endif;
+		currentPID = ((PTBR -1024) / 8);
+
+		currentPCB = READY_LIST + currentPID * 32;
+	
+		counter = 15;
+
+		while(counter < 31) do
+			if([currentPCB + counter]==-1) then
+				pppt_index = (counter-15)/2;
+				break;
+			endif;
+		counter=counter+2;
+		endwhile;
+	
+	//process has opened max 8 files : hence exists
+	
+		if(counter == 31) then
+			[physicalSP - 2]=-1;
+			ireturn;
+		endif;
+		
+	//setting up the per process table entry and system wide open file table entry
+
+		[currentPCB + 15 + pppt_index*2 + 0 ] = swof_index;
+		[currentPCB + 15 + pppt_index*2 + 1 ] = 0;
+	
+		[FILE_TABLE + swof_index*2 + 0] = fat_index;
+		[FILE_TABLE + swof_index*2 + 1] = [FILE_TABLE + swof_index*2 + 1]+1;
+		
+		[physicalSP - 2] = pppt_index;
+		ireturn;
+	endif;
+
+endif;
+	
+
+//system call : close
+
+
+if(sysCallNo == 3) then
+	fileDesc = [physicalSP - 3];
+
+	if(fileDesc < 0 || fileDesc > 7) then
+		[physicalSP - 2]=-1;
+		ireturn;
+	endif;
+	
+	currentPID=(PTBR-1024)/8;
+	currentPCB=READY_LIST + currentPID * 32;
+
+	if([currentPCB + 15 + 2 * fileDesc ] == -1 )then
+		[physicalSP -2]=-1;
+		ireturn;
+	endif;
+	
+	swof_index = [currentPCB + 15 + 2 * fileDesc ] ;
+	
+	
+	if(([FILE_TABLE + swof_index * 2 + 1]) > 1) then
+		
+		[FILE_TABLE + swof_index * 2 + 1]=[FILE_TABLE + swof_index * 2 + 1]-1;
+
+		if(([FILE_TABLE + swof_index * 2 + 1])==0) then
+			[FILE_TABLE + swof_index]=-1;
+		endif;
+			
+	endif;
+
+	[currentPCB + 15 + 2*fileDesc ] = -1 ;
+	[currentPCB + 15 + 2*fileDesc + 1] = -1; 
+
+	[physicalSP-2] = 0;
+	ireturn;
+
+endif;

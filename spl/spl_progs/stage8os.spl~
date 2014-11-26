@@ -1,0 +1,92 @@
+//EXCEPTION EXHANDLER
+
+load(7,1);
+load(8,2);
+
+//INT7 INTERRUPT
+
+load(23,17);
+load(24,18);
+
+//INT1 INTERRUPT
+load (11, 5);
+load (12, 6);
+
+//FAT & DF
+load (5,19);
+load (6,20);
+
+//TIMER INTERRUPT ROUTINE
+load (9, 3);
+load (10, 4);
+
+
+[READY_LIST + 0]=0;
+
+//LOADING INIT PROG.
+
+load(25,21);
+load(26,22);
+load(27,23);
+
+//setting the page table registers
+
+PTBR=1024;
+PTLR=4;
+
+//setting up the page table entries
+
+[PTBR + 0] = 25; // Physical Page Number for Logical Page 0
+[PTBR + 1] = "01"; // Auxiliary Information for Logical Page 0
+
+[PTBR + 2] = 26;
+[PTBR + 3] = "01";
+
+[PTBR + 4] = 27;
+[PTBR + 5] = "01";
+
+[PTBR + 6] = 28;// Auxiliary Information for Logical Page 3
+[PTBR + 7] = "01";// Auxiliary Information for Logical Page 3
+
+[READY_LIST + 1]= 2;
+
+SP = 3 * 512;
+
+[28 * 512]=0;
+
+
+alias counter S0;			
+counter = 0;
+
+//SYSTEM WIDE OPEN FILE TABLE
+while ( counter <  128) do			// 64 entries, each of size 2 words
+	[ FILE_TABLE + counter + 0] = -1;	// Set FAT Index to -1
+	[ FILE_TABLE + counter + 1] =  0;	// Set File Open Count to 0
+	counter = counter + 2;			// Move to next entry
+endwhile;
+
+
+counter = 15;
+//PER PROCESS OPEN FILE TABLE
+while ( counter <  31) do			
+	[ READY_LIST + counter + 0] = -1;	
+	[ READY_LIST + counter + 1] =  -1;	
+	counter = counter + 2;			
+endwhile;
+
+//INT2 INTERRUPT
+load (13,7);
+load (14,8);
+
+//INT3 INTERRUPT
+load (15,9);
+load (16,10);
+
+//INT4 INTERRUPT
+load (17,11);
+load (18,12);
+
+
+ireturn;
+
+

@@ -1,0 +1,151 @@
+//print "int 5";
+
+alias physicalSP S0;
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+alias indexSWOF S1;
+alias sysCallNo S2;
+alias counter S3;
+alias counterPTBR S4;
+alias counterCOPY S5;
+alias childPID S6;
+alias childPTBR S7;
+alias physicalChildSP S8;
+alias freePCB S9;
+alias validPage S10;
+alias freeMemPage S11;
+alias currentPCB S12;
+alias currentPID S13;
+
+
+counter=0;
+validPage=0;
+freePCB=0;
+counterCOPY=0; 
+counterPTBR=0;
+freeMemPage=0;
+
+currentPID = (PTBR - 1024) / 8;
+currentPCB = READY_LIST + 32 * currentPID;
+
+sysCallNo=[physicalSP-1];
+
+
+breakpoint;
+ 
+
+if ( sysCallNo == 8) then
+		
+	while(freePCB<32 && [READY_LIST+freePCB*32+1]!=0) do
+		freePCB=freePCB+1;
+	endwhile;
+	
+	if(freePCB==32) then
+		[physicalSP-2]=-1;
+		ireturn;
+	else
+		childPID=freePCB;
+		childPTBR=1024+childPID*8;
+		[READY_LIST+32*freePCB]=freePCB;
+		while(counter<4) do
+			if([PTBR+2*counter+1]!=00 || [PTBR+2*counter+1]!=10) then
+				validPage=validPage+1;
+			endif;			
+			counter=counter+1;
+		endwhile;
+		counter=29;
+		
+breakpoint;
+		while(counter<64 && [MEM_LIST+counter]!=0) do
+			counter=counter+1;	
+		endwhile;
+		if(counter==64) then
+			[physicalSP-2]=-1;
+			ireturn;
+		endif;
+		
+		while(freeMemPage<validPage && counter<64) do 
+			if([MEM_LIST+counter]==0) then
+				freeMemPage=freeMemPage+1;		
+			endif;
+			counter=counter+1;
+		endwhile;
+			
+		if(freeMemPage<validPage) then
+			[physicalSP-2]=-1;
+			ireturn;
+		else
+breakpoint;
+			counter=0;
+			while(counter<4) do
+				[childPTBR+counter*2]=[PTBR+counter*2];
+				[childPTBR+counter*2+1]=[PTBR+counter*2+1];			
+				counter=counter+1;			
+			endwhile;
+	
+			
+			freeMemPage=0;
+			counter=0;
+breakpoint;
+			while(freeMemPage<validPage) do
+				if([MEM_LIST+counter]==0) then
+					[MEM_LIST+counter]=1;
+					while([PTBR+2*counterPTBR+1]==00 || [PTBR+2*counterPTBR+1]==10) do
+						[childPTBR+counter*2]=-1;
+						[childPTBR+counter*2+1]=[PTBR+counter*2+1];
+						counterPTBR=counterPTBR+1;
+					endwhile;
+					
+					counterCOPY=0;
+					while(counterCOPY<512) do
+						[counter*512+counterCOPY]=[[PTBR+counterPTBR*2]*512+counterCOPY];
+						counterCOPY=counterCOPY+1;
+					endwhile;		
+					[childPTBR+counterPTBR*2]=counter;	
+					counterPTBR=counterPTBR+1;				
+					freeMemPage=freeMemPage+1;
+				endif;
+				counter=counter+1;
+			endwhile;
+breakpoint;
+			
+			[READY_LIST+childPID*32+5]=childPTBR;		
+			[READY_LIST+childPID*32+4]=[physicalSP];
+			[READY_LIST+childPID*32+3]=SP-1;				
+			[READY_LIST+childPID*32+2]=BP;		
+			[READY_LIST+childPID*32+6]=PTLR;
+			[READY_LIST+childPID*32+7]=R0;
+			[READY_LIST+childPID*32+8]=R1;
+			[READY_LIST+childPID*32+9]=R2;
+			[READY_LIST+childPID*32+10]=R3;
+			[READY_LIST+childPID*32+11]=R4;
+			[READY_LIST+childPID*32+12]=R5;
+			[READY_LIST+childPID*32+13]=R6;
+			[READY_LIST+childPID*32+14]=R7;       
+breakpoint;
+			counter=0;
+			while(counter<16) do
+				[READY_LIST+32*freePCB+15+counter]=[currentPCB+15+counter];
+				counter=counter+1;
+			endwhile;	
+			counter=0;
+			while(counter<8) do
+				if([currentPCB+15+counter*2]!=-1) then
+					indexSWOF=[currentPCB+15+counter*2];					
+					[FILE_TABLE+indexSWOF*2+1]=[FILE_TABLE+indexSWOF*2+1]+1;			
+				endif;
+				counter=counter+1;
+			endwhile;
+breakpoint;
+			[READY_LIST+childPID*32+1]=1;
+			[physicalSP-2]=childPID;
+			physicalChildSP=([childPTBR + 2 * ((SP-1) / 512)] * 512) + ((SP-1) % 512);
+			// store the PID of the parent in the Parent PID field in the PCB of the child process created
+			[READY_LIST+childPID*32+31]=currentPID;
+			[physicalChildSP-1]=-2;
+			ireturn;
+		endif;
+breakpoint;
+	endif;
+		
+endif;
+

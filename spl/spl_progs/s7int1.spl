@@ -1,0 +1,91 @@
+alias physicalSP S0;
+alias sysCallNo S1;
+alias filename S2;
+
+
+alias i S4;
+i=0;
+alias j S5;
+j=0;
+alias k S6;
+k=0;
+
+//obtaining the stack pointer addr.
+physicalSP = ([PTBR + 2 * (SP/512)] * 512 ) + (SP % 512);
+
+//Fetching system call # and argument (here file name)
+
+sysCallNo=[physicalSP-1];
+filename = [physicalSP -3];
+
+
+//Create : system call
+
+if ( sysCallNo == 1) then
+
+//checking for disk free list .Breaks when found a free block else exists
+
+	while(i<448) do
+		if([DISK_LIST + i]==0) then
+			break;
+			//Now we have the value of basic block#
+		endif;
+	i=i+1;
+	endwhile;
+
+//No free blocks
+	if(i == 448) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+
+//checking FAT entries
+
+	while(j<512) do
+		if([FAT + j] == filename) then
+			[physicalSP-2]=0;
+			ireturn;
+			//Returns if file already exists
+		endif;
+		j=j+8;  //8 word long
+	endwhile;
+	
+//checks for free fat entry
+	j=0;
+
+	while(j<512) do
+		if([FAT + j + 2 ]== -1) then
+			break;
+		endif;
+		j=j+8;
+	endwhile;
+
+	
+
+	if(j == 512) then
+		[physicalSP-2]=-1;
+		ireturn;
+		//if no free fat; returns 
+	endif;
+
+//Setting the fat entry
+
+	[FAT+j]=filename;
+	[FAT+j+1]=0;
+	[FAT+j+2]=i;	
+
+//Setting the basic block entries
+
+	load(1,i);
+
+	while(k < 256) do
+		[SCRATCHPAD + k]=-1;
+		k=k+1;
+	endwhile;
+
+	store(1,i);
+	store (5,19);
+	store (6,20);
+	[physicalSP-2]=0;
+	ireturn;
+endif;

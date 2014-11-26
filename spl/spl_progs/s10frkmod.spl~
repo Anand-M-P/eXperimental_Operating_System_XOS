@@ -1,0 +1,209 @@
+//STAGE 10 INT 5 MODIFICATION FOR STACK PAGE REPLACEMENT
+
+alias physicalSP S0;
+alias childPhysicalSP S1;
+alias counter S3;
+alias sysCallNo S4;
+alias PCBindex S5;
+alias parentPCB S6;
+alias parentPID S12;
+alias validPageCounter S7;
+alias childPCB S2;
+alias childPID S10;
+alias childPTBR S8;
+alias j S9;
+alias count S11;
+alias freePage S13;
+alias i S14;
+alias nextPTBR S15;
+
+
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+sysCallNo=[physicalSP-1];
+parentPID=(PTBR-1024)/8;
+parentPCB=READY_LIST + parentPID*32;
+
+PCBindex=0;
+
+if ( sysCallNo == 8) then
+	
+	//checks for the free PCB
+	while(PCBindex<32 && [READY_LIST + 32*PCBindex + 1]!=0) do
+		PCBindex=PCBindex+1;
+        endwhile;	
+
+	//no free PCB
+   	if(PCBindex==32) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+    	
+	childPID=PCBindex;	
+	[READY_LIST + 32*PCBindex]=PCBindex;
+	childPCB=READY_LIST + 32*childPID;
+	childPTBR=1024+childPID*8;
+
+//-------------------------FORK MODIFICATIONS---------------------------------------
+
+	//Checks for free memory page
+	counter=0;
+	while(counter<64 && [MEM_LIST+counter]!=0) do
+		counter=counter+1;
+	endwhile;
+	
+	nextPTBR=PTBR;
+	//NO free memory page
+	if(counter==64) then
+		j=0;                     
+			while(count<128) do
+				if(j != 3) then
+					if([nextPTBR+j*2+1]=="11") then
+						[nextPTBR+j*2+1]="01";
+						//count=count+1;
+						//j=j+1;
+					endif;
+
+breakpoint;
+					if([nextPTBR+j*2+1]=="01") then
+						if([[nextPTBR+j*2]+MEM_LIST]<2) then //Memory page is not shared.
+							i=448;
+							//checking disk free list
+							while(i<512 && [DISK_LIST+i]!=0) do
+								i=i+1;
+							endwhile;
+							
+							if(i==512) then
+								[physicalSP-2]=-1;
+								ireturn;
+								//inline "MOV R0,10"
+								//inline "PUSH R0"
+								//inline "PUSH R0"
+								//inline "JMP 11776";   //NO free swap block available exit
+							endif;
+							
+							store([nextPTBR+j*2],i);
+
+							[[nextPTBR+j*2]+MEM_LIST]=0;
+							[DISK_LIST+i]=[DISK_LIST+i]+1;
+
+							freePage=[nextPTBR+j*2];
+
+							[nextPTBR+j*2]=i;
+							[nextPTBR+j*2+1]="00";
+							break;
+						endif;
+					endif;
+breakpoint;
+					count=count+1;
+					j=j+1;
+				else
+					count=count+1;
+					j=0;
+					if(nextPTBR==1272) then
+						nextPTBR=PAGE_TABLE;
+					else
+					        nextPTBR=nextPTBR+8;
+					endif;
+breakpoint;
+				endif;
+			endwhile;
+	endif;
+	if(counter==64)then
+		counter=freePage;
+		[MEM_LIST+counter]=1;
+	else
+		[MEM_LIST+counter]=1;
+	endif;
+	       //Free page entry set to used/1     
+
+	//----------------------COPYING THE STACK OF THE PARENT-----------------------
+	alias wordCount S9;
+	wordCount=0;
+	while(wordCount<512) do                                      
+		[ counter*512 + wordCount]=[[PTBR + 3*2]*512 + wordCount];
+		wordCount=wordCount+1;
+	endwhile;
+	
+	[childPTBR+3*2]=counter;
+	[childPTBR+3*2+1]="01";	//Unreferenced, Valid
+
+	//----------------------------------------------------------------------------
+
+	//--------------------------SHARING PARENT PAGE TABLE TO CHILD PAGE TABLE--------------------------	
+
+	counter=0;
+	while(counter<3) do                                           
+		[childPTBR + counter*2]=[PTBR+ counter*2];
+		[childPTBR + counter*2 + 1]=[PTBR+ counter*2 + 1];
+		if([childPTBR + counter*2 + 1]=="01" || [childPTBR + counter*2 + 1]=="11") then
+			[MEM_LIST+[childPTBR + counter*2]]=[MEM_LIST+[childPTBR + counter*2]] + 1;      //Incrementing the page entry
+		else
+			if([childPTBR + counter*2]>447) then
+				[DISK_LIST+[childPTBR + counter*2]]=[DISK_LIST+[childPTBR + counter*2]] + 1; 
+			endif;
+		endif;
+		counter=counter+1;
+	endwhile;
+     	
+	store(6,20); //storing back the new DF list
+	
+	//---------------------------------------------------------------------------------------------------
+
+	//setting the PCB entries for the child
+
+	[childPCB + 5]=childPTBR;
+	[childPCB + 4]=[physicalSP];
+	[childPCB + 3]=SP-1;
+	[childPCB + 2]=BP;
+	[childPCB + 6]=PTLR;
+	[childPCB + 7]=R0;
+	[childPCB + 8]=R1;
+	[childPCB + 9]=R2;
+	[childPCB + 10]=R3;
+	[childPCB + 11]=R4;
+	[childPCB + 12]=R5;
+	[childPCB + 13]=R6;
+	[childPCB + 14]=R7;
+	
+	counter=0;
+	
+	//------------------------PPOF TABLE----------------------------
+
+	while(counter<8) do
+		[childPCB + 15 + 2*counter] = [parentPCB + 15 + 2*counter];
+		[childPCB + 15 + 2*counter+1] = [parentPCB + 15 + 2*counter+1];	
+		counter=counter+1;
+	endwhile;
+
+	//------------------------SWOF TABLE----------------------------
+	counter=0;
+	while(counter<8) do
+		if([parentPCB + 15 + 2*counter] != -1) then    //valid entry SWOP index
+			[FILE_TABLE + [parentPCB + 15 + counter*2]*2 + 1]=[FILE_TABLE + [parentPCB + 15 + counter*2]*2 + 1] + 1;
+		endif;
+		counter=counter+1;
+	endwhile;
+
+	[childPCB + 1]=1;
+	[physicalSP-2]=childPID;
+	childPhysicalSP=([childPTBR + ((SP-1)/512)*2]*512) + ((SP-1) % 512);
+	[childPhysicalSP-1]=-2;
+	ireturn;
+
+
+endif;
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

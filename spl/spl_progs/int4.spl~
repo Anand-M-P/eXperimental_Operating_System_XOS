@@ -1,0 +1,78 @@
+alias sysCallNo S0;
+alias swof_index S1;
+alias fat_index S2;
+alias filename S3;
+alias physicalSP S4;
+alias currentPCB S5;
+alias currentPID S6;
+alias fileDesc S7;
+alias wordToWrite S8;
+alias lseek S9;
+alias basicBlock S10;
+alias dataBlock S11;
+alias freeBlock S12;
+
+physicalSP=([PTBR + 2 * (SP/512)] * 512)+(SP%512);
+filename=[physicalSP-3];
+sysCallNo=[physicalSP-1];
+
+fat_index=0;
+swof_index=0;
+
+if(sysCallNo==5) then
+	wordToWrite=[physicalSP-3];
+	fileDesc=[physicalSP-4];
+
+//checking whether valid file descriptor
+	if(fileDesc<0||fileDesc>7) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+
+	currentPID=(PTBR-1024)/8;
+	currentPCB=READY_LIST+currentPID*32;
+	
+	if([currentPCB+15+2*fileDesc] == -1) then
+		[physicalSP-2]=-1;
+		ireturn;
+	endif;
+
+//storing the sys wide open file table and lseek entries,fat
+	swof_index=[currentPCB+15+2*fileDesc];
+	lseek=[currentPCB+15+2*fileDesc+1];
+	fat_index=[FILE_TABLE+swof_index*2];
+	basicBlock=[FAT+fat_index*8+2];
+
+	
+	load(1,basicBlock);
+	dataBlock=lseek/512;
+
+	freeBlock=0;
+	if([512+dataBlock]==-1)then
+		while(freeBlock<448 && [DISK_LIST+freeBlock]==1) do
+			freeBlock=freeBlock+1;
+		endwhile;
+
+		if(freeBlock==448) then
+			[physicalSP-2]=-1;
+			ireturn;
+		else
+			[DISK_LIST+freeBlock]=1;
+			[SCRATCHPAD+lseek/512]=freeBlock;
+			[FAT+fat_index*8+1]=[FAT + 8*fat_index + 1] + 512;//setting file size;
+		endif;
+	endif;
+	
+	freeBlock=[512+lseek/512];
+	store(1,basicBlock);
+	store(5,19);
+	store(6,20);
+	load(1,freeBlock);
+	[SCRATCHPAD+(lseek%512)]=wordToWrite;
+	store(1,freeBlock);
+	[currentPCB+15+2*fileDesc+1]=  [currentPCB + 15 + 2*fileDesc + 1] + 1;
+	[physicalSP-2]=0;
+	ireturn;
+
+endif;
+

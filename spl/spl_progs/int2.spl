@@ -1,0 +1,118 @@
+alias physicalSP S0;
+alias filename S1;
+alias counter S3;
+alias sysCallNo S4;
+alias Fatcounter S5;
+alias SWOPindex S6;
+alias PPOFindex S7;
+alias CurrentPCB S2;
+alias CurrentPID S10;
+alias fileDesc S8;
+ 
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+sysCallNo=[physicalSP-1];
+
+PPOFindex=0;
+SWOPindex=0;
+Fatcounter=0;
+counter=0;
+
+if ( sysCallNo == 2) then
+		 filename=[physicalSP-3];
+
+	
+                 while(Fatcounter<64 && [FAT+8*Fatcounter]!=filename ) do
+                      Fatcounter=Fatcounter+1;
+        	 endwhile; 
+                 
+  		
+        if(Fatcounter==64 ) then
+		
+       		 [physicalSP -2]=-1;
+        	 ireturn;
+		
+	else  	
+
+		  while(SWOPindex < 64 && [ FILE_TABLE + SWOPindex*2 ] != Fatcounter  && [ FILE_TABLE + SWOPindex*2 ] != -1) do
+			SWOPindex = SWOPindex + 1 ;
+                  endwhile;
+
+		  if(SWOPindex==64) then
+		    [physicalSP -2]=-1;
+        	     ireturn;
+		  endif;
+
+                 CurrentPID = (PTBR - 1024) / 8;
+		 CurrentPCB = READY_LIST + 32 * CurrentPID;
+				
+		  while([CurrentPCB + 15 + 2*PPOFindex ] != -1 && PPOFindex<8) do
+ 		   PPOFindex=PPOFindex+1;
+		  endwhile;			
+
+	   	   if(PPOFindex==8) then
+                     [physicalSP -2]=-1;
+        	     ireturn;
+		   else
+  		     [CurrentPCB + 15 + 2*PPOFindex ]= SWOPindex;
+		     [CurrentPCB + 15 + 2*PPOFindex +1]=0;
+	             [ FILE_TABLE + SWOPindex*2 ]= Fatcounter;
+                     [ FILE_TABLE + SWOPindex*2 +1]=[ FILE_TABLE + SWOPindex*2 +1]+1;
+		     [physicalSP -2]= PPOFindex;
+        	     ireturn;
+	           endif;			
+
+       endif; 
+			
+
+endif;
+
+
+if ( sysCallNo == 3) then
+         fileDesc=[physicalSP-3];
+
+         if(fileDesc < 0 || fileDesc > 7) then
+               [physicalSP-2]=-1;
+	        ireturn;
+
+	 endif; 
+	
+	CurrentPID = (PTBR - 1024) / 8;
+        CurrentPCB = READY_LIST + 32 * CurrentPID;
+				
+        if([CurrentPCB + 15 + 2*fileDesc ] == -1) then
+        	
+                [physicalSP-2]=-1;
+	        ireturn;
+	endif;
+
+         SWOPindex=[CurrentPCB + 15 + 2*fileDesc ];
+         [FILE_TABLE + SWOPindex*2]=-1;
+        
+	 if( [FILE_TABLE + SWOPindex*2 + 1] > 0) then
+                 [FILE_TABLE + SWOPindex*2 + 1] =  [FILE_TABLE + SWOPindex*2 + 1]-1;
+
+	 endif;
+
+         [CurrentPCB + 15 + 2*fileDesc ] = -1 ;
+	 [CurrentPCB + 15 + 2*fileDesc + 1] = -1; 
+ 
+	 [physicalSP-2] = 0;
+	        ireturn;
+
+
+  	
+
+endif;
+
+
+
+
+
+
+
+
+
+
+		  
+
+
